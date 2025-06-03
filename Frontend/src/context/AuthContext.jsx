@@ -9,20 +9,29 @@ import {
   onAuthStateChange
 } from '../utils/firebase';
 import { createCompatibleJWT, updateAuthHeaders } from '../utils/authBridge';
+import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext();
 export { AuthContext };
 
 export const AuthProvider = ({ children }) => {
+    const navigate = useNavigate();
+    
     // Initialize state from localStorage if available
     const storedUser = localStorage.getItem('user');
     const initialUser = storedUser ? JSON.parse(storedUser) : null;
     const initialAuthState = !!localStorage.getItem('accessToken') || !!localStorage.getItem('token');
+    const storedOrganization = localStorage.getItem('organization');
+    const initialOrganization = storedOrganization ? JSON.parse(storedOrganization) : null;
     
     const [user, setUser] = useState(initialUser);
     const [loading, setLoading] = useState(true); // Start with loading true
     const [error, setError] = useState(null);
     const [isAuthenticated, setIsAuthenticated] = useState(initialAuthState);
+    const [organization, setOrganization] = useState(initialOrganization);
+    const [subscriptionStatus, setSubscriptionStatus] = useState(
+        initialOrganization?.subscription?.status || 'unknown'
+    );
 
     // Function to check authentication status using Firebase
     const checkAuthStatus = async () => {
@@ -42,6 +51,35 @@ export const AuthProvider = ({ children }) => {
                     // Set user data from the auth response
                     setUser(authData.user);
                     setIsAuthenticated(true);
+                    
+                    // Fetch organization data
+                    try {
+                        const orgResponse = await api.get('/api/organization/current');
+                        if (orgResponse.data && orgResponse.data.success) {
+                            const orgData = orgResponse.data.data;
+                            setOrganization(orgData);
+                            setSubscriptionStatus(orgData.subscription.status);
+                            localStorage.setItem('organization', JSON.stringify(orgData));
+                            
+                            // Check subscription status
+                            if (orgData.subscription.status === 'expired' || orgData.subscription.status === 'cancelled') {
+                                console.warn('Subscription expired or cancelled');
+                                // Redirect to subscription page if needed
+                                if (window.location.pathname !== '/subscription') {
+                                    navigate('/subscription', { state: { expired: true } });
+                                }
+                            }
+                        }
+                    } catch (orgError) {
+                        console.error('Failed to fetch organization data:', orgError);
+                        // If 404, user might not be associated with an organization yet
+                        if (orgError.response && orgError.response.status === 404) {
+                            // Redirect to organization creation if needed
+                            if (window.location.pathname !== '/register-organization') {
+                                navigate('/register-organization');
+                            }
+                        }
+                    }
                     
                     console.log('Authentication successful, tokens created for backend compatibility');
                     return true;
@@ -71,7 +109,28 @@ export const AuthProvider = ({ children }) => {
                     setUser(userData);
                     setIsAuthenticated(true);
                     localStorage.setItem('user', JSON.stringify(userData));
-                    api.defaults.headers.common['Authorization'] = authHeader;
+                    
+                    // Try to fetch organization data
+                    try {
+                        const orgResponse = await api.get('/api/organization/current');
+                        if (orgResponse.data && orgResponse.data.success) {
+                            const orgData = orgResponse.data.data;
+                            setOrganization(orgData);
+                            setSubscriptionStatus(orgData.subscription.status);
+                            localStorage.setItem('organization', JSON.stringify(orgData));
+                            
+                            // Check subscription status
+                            if (orgData.subscription.status === 'expired' || orgData.subscription.status === 'cancelled') {
+                                console.warn('Subscription expired or cancelled');
+                                // Redirect to subscription page if needed
+                                if (window.location.pathname !== '/subscription') {
+                                    navigate('/subscription', { state: { expired: true } });
+                                }
+                            }
+                        }
+                    } catch (orgError) {
+                        console.error('Failed to fetch organization data:', orgError);
+                    }
                     
                     return true;
                 }
@@ -189,6 +248,29 @@ export const AuthProvider = ({ children }) => {
                     // Create compatible JWT tokens for backend API calls
                     await createCompatibleJWT();
                     
+                    // Fetch organization data
+                    try {
+                        const orgResponse = await api.get('/api/organization/current');
+                        if (orgResponse.data && orgResponse.data.success) {
+                            const orgData = orgResponse.data.data;
+                            setOrganization(orgData);
+                            setSubscriptionStatus(orgData.subscription.status);
+                            localStorage.setItem('organization', JSON.stringify(orgData));
+                            
+                            // Check subscription status
+                            if (orgData.subscription.status === 'expired' || orgData.subscription.status === 'cancelled') {
+                                console.warn('Subscription expired or cancelled');
+                                // We'll handle the redirect after login completes
+                            }
+                        }
+                    } catch (orgError) {
+                        console.error('Failed to fetch organization data:', orgError);
+                        // If 404, user might not be associated with an organization yet
+                        if (orgError.response && orgError.response.status === 404) {
+                            // We'll handle the redirect after login completes
+                        }
+                    }
+                    
                     // Manually set authenticated state for immediate feedback
                     setIsAuthenticated(true);
                     
@@ -255,11 +337,19 @@ export const AuthProvider = ({ children }) => {
             // Use Firebase logout
             await logoutFromFirebase();
             // Firebase auth state change will handle the rest
+            
+            // Clear organization data
+            setOrganization(null);
+            setSubscriptionStatus('unknown');
+            localStorage.removeItem('organization');
         } catch (error) {
             console.error('Logout error:', error);
             // Even if Firebase logout fails, clear the local state
             setUser(null);
             setIsAuthenticated(false);
+            setOrganization(null);
+            setSubscriptionStatus('unknown');
+            localStorage.removeItem('organization');
         } finally {
             setLoading(false);
         }
@@ -277,6 +367,19 @@ export const AuthProvider = ({ children }) => {
                     const authData = await createCompatibleJWT();
                     
                     // Update user data
+                    
+                    // Fetch organization data
+                    try {
+                        const orgResponse = await api.get('/api/organization/current');
+                        if (orgResponse.data && orgResponse.data.success) {
+                            const orgData = orgResponse.data.data;
+                            setOrganization(orgData);
+                            setSubscriptionStatus(orgData.subscription.status);
+                            localStorage.setItem('organization', JSON.stringify(orgData));
+                        }
+                    } catch (orgError) {
+                        console.error('Failed to fetch organization data:', orgError);
+                    }
                     setUser(authData.user);
                     
                     console.log('User data refreshed, tokens updated for backend compatibility');
@@ -324,7 +427,10 @@ export const AuthProvider = ({ children }) => {
             logout,
             refreshUserData,
             checkAuthStatus,
-            isAuthenticated 
+            isAuthenticated,
+            organization,
+            subscriptionStatus,
+            hasActiveSubscription: subscriptionStatus === 'active'
         }}>
             {children}
         </AuthContext.Provider>

@@ -14,7 +14,10 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Auth/Login";
 import Signup from "./pages/Auth/Signup";
 import ForgotPassword from "./pages/Auth/ForgotPassword";
-import RegisterOrganization from "./pages/Auth/RegisterOrganization";
+
+// Organization and Subscription pages
+import RegisterOrganization from "./pages/RegisterOrganization";
+import Subscription from "./pages/Subscription";
 
 // Document Management
 import DocManagement from "./pages/DocsFilePages/DocManagement";
@@ -79,6 +82,9 @@ const App = () => {
 
               {/* Doc Section */}
               <Route path="/docfile-management" element={<DocManagement />} />
+              
+              {/* Organization and Subscription */}
+              <Route path="/subscription" element={<Subscription />} />
 
               {/* Catch all route */}
               <Route path="*" element={<Navigate to="/vehicles-dashboard" replace />} />

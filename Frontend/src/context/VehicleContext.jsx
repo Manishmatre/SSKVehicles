@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
+import { AuthContext } from './AuthContext';
 
 // Create the context
 const VehicleContext = createContext();
@@ -12,11 +13,15 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:7000';
 
 // Provider component
 export const VehicleProvider = ({ children }) => {
+  const { organization, hasActiveSubscription, subscriptionStatus } = useContext(AuthContext);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [vehicleLimit, setVehicleLimit] = useState(0);
+  const [vehicleCount, setVehicleCount] = useState(0);
+  const [canAddVehicle, setCanAddVehicle] = useState(false);
 
-  // Load vehicles from API on initial render
+  // Load vehicles from API on initial render and when organization changes
   useEffect(() => {
     const fetchVehicles = async () => {
       try {
@@ -24,35 +29,53 @@ export const VehicleProvider = ({ children }) => {
         // Try to get token from both accessToken (new) and token (legacy) locations
         const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
         
-        // Debug token information
-        console.log('Debug - Token exists:', !!token);
-        if (token) {
-          console.log('Debug - Token first 10 chars:', token.substring(0, 10) + '...');
-        }
-        
         if (!token) {
-          console.log('Debug - No token found in localStorage');
+          console.log('No token found in localStorage');
           setError('Authentication required');
           setLoading(false);
           return;
         }
         
-        console.log('Debug - Making API request to:', `${API_URL}/api/vehicles`);
-        console.log('Debug - With headers:', { Authorization: `Bearer ${token.substring(0, 10)}...` });
+        // Check if organization and subscription are valid
+        if (!organization) {
+          console.log('No organization data available');
+          setVehicles([]);
+          setLoading(false);
+          return;
+        }
         
+        if (!hasActiveSubscription) {
+          console.log('Subscription not active:', subscriptionStatus);
+          // Still fetch vehicles but will show warning in UI
+        }
+        
+        // Get subscription limits from organization data
+        const vehicleLimitFromSub = organization?.subscription?.limits?.vehicles || 0;
+        setVehicleLimit(vehicleLimitFromSub);
+        
+        // Fetch vehicles with pagination and filtering
         const response = await axios.get(`${API_URL}/api/vehicles`, {
           headers: {
             Authorization: `Bearer ${token}`
+          },
+          params: {
+            // Add pagination and filtering params if needed
+            limit: 100,
+            page: 1
           }
         });
         
-        console.log('Debug - API response:', response.status, response.statusText);
-        
         if (response.data.success) {
-          console.log('Debug - Vehicles received:', (response.data.data || []).length);
-          setVehicles(response.data.data || []);
+          const vehiclesData = response.data.data || [];
+          setVehicles(vehiclesData);
+          setVehicleCount(vehiclesData.length);
+          
+          // Check if user can add more vehicles based on subscription
+          const canAdd = hasActiveSubscription && (vehicleLimitFromSub === -1 || vehiclesData.length < vehicleLimitFromSub);
+          setCanAddVehicle(canAdd);
+          
+          console.log(`Vehicles: ${vehiclesData.length}/${vehicleLimitFromSub === -1 ? 'Unlimited' : vehicleLimitFromSub}`);
         } else {
-          console.log('Debug - API returned error:', response.data.error);
           throw new Error(response.data.error || 'Failed to fetch vehicles');
         }
       } catch (err) {
@@ -71,7 +94,7 @@ export const VehicleProvider = ({ children }) => {
     };
     
     fetchVehicles();
-  }, []);
+  }, [organization, hasActiveSubscription, subscriptionStatus]);
 
   // Get a vehicle by ID
   const getVehicleById = async (id) => {
@@ -109,10 +132,24 @@ export const VehicleProvider = ({ children }) => {
   const addVehicle = async (newVehicle) => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       
       if (!token) {
         setError('Authentication required');
+        setLoading(false);
+        return null;
+      }
+      
+      // Check subscription status and vehicle limits
+      if (!hasActiveSubscription) {
+        setError('Your subscription is not active. Please update your subscription to add vehicles.');
+        setLoading(false);
+        return null;
+      }
+      
+      // Check if vehicle limit has been reached
+      if (vehicleLimit !== -1 && vehicleCount >= vehicleLimit) {
+        setError(`You have reached the maximum number of vehicles (${vehicleLimit}) allowed for your subscription plan. Please upgrade your subscription to add more vehicles.`);
         setLoading(false);
         return null;
       }
@@ -130,6 +167,11 @@ export const VehicleProvider = ({ children }) => {
         }
       });
       
+      // Ensure the vehicle is associated with the current organization
+      if (organization?._id) {
+        formData.append('organizationId', organization._id);
+      }
+      
       const response = await axios.post(`${API_URL}/api/vehicles`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -140,6 +182,13 @@ export const VehicleProvider = ({ children }) => {
       if (response.data.success) {
         const addedVehicle = response.data.data;
         setVehicles([...vehicles, addedVehicle]);
+        setVehicleCount(vehicleCount + 1);
+        
+        // Update canAddVehicle status
+        if (vehicleLimit !== -1 && vehicleCount + 1 >= vehicleLimit) {
+          setCanAddVehicle(false);
+        }
+        
         return addedVehicle;
       } else {
         throw new Error(response.data.error || 'Failed to add vehicle');
@@ -157,10 +206,25 @@ export const VehicleProvider = ({ children }) => {
   const updateVehicle = async (updatedVehicle) => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       
       if (!token) {
         setError('Authentication required');
+        setLoading(false);
+        return null;
+      }
+      
+      // Check subscription status
+      if (!hasActiveSubscription) {
+        setError('Your subscription is not active. Please update your subscription to modify vehicles.');
+        setLoading(false);
+        return null;
+      }
+      
+      // Verify the vehicle belongs to this organization
+      const existingVehicle = vehicles.find(v => v._id === updatedVehicle._id);
+      if (!existingVehicle) {
+        setError('Vehicle not found or you do not have access to this vehicle');
         setLoading(false);
         return null;
       }
@@ -169,7 +233,12 @@ export const VehicleProvider = ({ children }) => {
       
       // Add all vehicle properties to formData
       Object.keys(updatedVehicle).forEach(key => {
-        if (key === 'vehiclePhoto' || key === 'documents') {
+        // Skip organizationId to prevent unauthorized changes
+        if (key === 'organizationId') {
+          // Ensure organizationId doesn't change
+          formData.append('organizationId', organization._id);
+        }
+        else if (key === 'vehiclePhoto' || key === 'documents') {
           if (updatedVehicle[key] && updatedVehicle[key] instanceof File) {
             formData.append(key, updatedVehicle[key]);
           }
@@ -177,6 +246,11 @@ export const VehicleProvider = ({ children }) => {
           formData.append(key, updatedVehicle[key]);
         }
       });
+      
+      // Ensure the vehicle is associated with the current organization
+      if (organization?._id && !formData.get('organizationId')) {
+        formData.append('organizationId', organization._id);
+      }
       
       const response = await axios.put(`${API_URL}/api/vehicles/${updatedVehicle._id}`, formData, {
         headers: {
@@ -207,10 +281,25 @@ export const VehicleProvider = ({ children }) => {
   const deleteVehicle = async (id) => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       
       if (!token) {
         setError('Authentication required');
+        setLoading(false);
+        return false;
+      }
+      
+      // Check subscription status
+      if (!hasActiveSubscription) {
+        setError('Your subscription is not active. Please update your subscription to manage vehicles.');
+        setLoading(false);
+        return false;
+      }
+      
+      // Verify the vehicle belongs to this organization
+      const existingVehicle = vehicles.find(v => v._id === id);
+      if (!existingVehicle) {
+        setError('Vehicle not found or you do not have access to this vehicle');
         setLoading(false);
         return false;
       }
@@ -223,6 +312,13 @@ export const VehicleProvider = ({ children }) => {
       
       if (response.data.success) {
         setVehicles(vehicles.filter(vehicle => vehicle._id !== id));
+        setVehicleCount(vehicleCount - 1);
+        
+        // Update canAddVehicle status
+        if (vehicleLimit !== -1 && vehicleCount <= vehicleLimit) {
+          setCanAddVehicle(true);
+        }
+        
         return true;
       } else {
         throw new Error(response.data.error || 'Failed to delete vehicle');
@@ -400,7 +496,13 @@ export const VehicleProvider = ({ children }) => {
     deleteVehicle,
     addMaintenanceRecord,
     addFuelRecord,
-    addInsuranceRecord
+    addInsuranceRecord,
+    // Subscription and organization related properties
+    vehicleLimit,
+    vehicleCount,
+    canAddVehicle,
+    hasReachedVehicleLimit: vehicleLimit !== -1 && vehicleCount >= vehicleLimit,
+    isSubscriptionActive: hasActiveSubscription
   };
 
   return (

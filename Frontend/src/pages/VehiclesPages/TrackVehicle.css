@@ -1,0 +1,83 @@
+.track-vehicle-container {
+  padding: 20px;
+  height: 100%;
+}
+
+.search-container {
+  margin-bottom: 20px;
+}
+
+.search-container input {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tracking-content {
+  display: flex;
+  gap: 20px;
+  height: calc(100vh - 180px);
+}
+
+.map-container {
+  flex: 2;
+  min-height: 500px;
+}
+
+.vehicle-details {
+  flex: 1;
+  padding: 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  overflow-y: auto;
+}
+
+.details-card {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.label {
+  font-weight: bold;
+  color: #555;
+}
+
+.no-selection {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.info-window h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.info-window p {
+  margin: 5px 0;
+  color: #666;
+}
+
+@media (max-width: 768px) {
+  .tracking-content {
+    flex-direction: column;
+  }
+  
+  .map-container,
+  .vehicle-details {
+    flex: auto;
+    width: 100%;
+  }
+}

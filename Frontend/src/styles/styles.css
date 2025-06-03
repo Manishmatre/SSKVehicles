@@ -1,0 +1,69 @@
+.dashboard {
+  padding: 20px;
+}
+
+.add-vehicle-button {
+  margin-bottom: 20px;
+}
+
+.filter-container {
+  margin-bottom: 20px;
+}
+
+.table-container {
+  margin-top: 20px;
+}
+
+.search-input {
+  margin-bottom: 10px;
+  padding: 5px;
+}
+
+.vehicle-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.vehicle-table th, .vehicle-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.vehicle-table th {
+  background-color: #f2f2f2;
+}
+
+.add-vehicle-form div {
+  margin-bottom: 10px;
+}
+
+.add-vehicle-form label {
+  margin-right: 10px;
+}
+
+.sidebar {
+  background-color: #2d3748;
+  color: #fff;
+  width: 250px;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease-in-out;
+  z-index: 40;
+}
+
+.sidebar.open {
+  transform: translateX(0);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 30;
+}
